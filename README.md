@@ -38,7 +38,10 @@ The goal of this project is to demonstrate clean backend structure, API integrat
 ```bash
 git clone <your-repo-link>
 cd trading_bot
-2. Create and activate virtual environment
+
+
+###2. Create and activate virtual environment
+```
 python -m venv .venv
 
 # Windows PowerShell

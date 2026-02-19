@@ -54,9 +54,12 @@ python -m venv .venv
 source .venv/bin/activate
 
 
+#3. Install dependencies
+```bash
 pip install -r requirements.txt
 
-4. Setup environment variables
+#4. Setup environment variables
+```bash
 Create a .env file:
 
 copy .env.example .env   # Windows
@@ -69,23 +72,24 @@ BINANCE_API_SECRET=your_api_secret
 BINANCE_BASE_URL=https://testnet.binancefuture.com
 
 
-How to Run
+#How to Run
 Using CLI (Required)
 MARKET order example
 python cli.py --symbol BTCUSDT --side BUY --type MARKET --quantity 0.01
 LIMIT order example
 python cli.py --symbol BTCUSDT --side BUY --type LIMIT --quantity 0.01 --price 65000
-Note:
+
+#Note:
 
 BUY → set price below market
 
 SELL → set price above market
 
-Using UI (Optional Bonus)
+#Using UI (Optional Bonus)
 streamlit run ui.py
 This will open a browser-based interface to place orders.
 
-Logging
+# Logging
 All API requests, responses, and errors are logged in:
 
 logs/bot.log
@@ -95,7 +99,7 @@ logs/market_order.log
 
 logs/limit_order.log
 
-Project Structure
+# Project Structure
 trading_bot/
   bot/
     client.py          # Binance API wrapper (request signing)
@@ -107,7 +111,8 @@ trading_bot/
   ui.py                # Optional UI
   requirements.txt
   README.md
-Assumptions
+
+# Assumptions
 Uses Binance Futures Testnet (USDT-M)
 
 API keys are valid and have trading permissions

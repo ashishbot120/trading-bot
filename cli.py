@@ -11,25 +11,11 @@ from bot.validators import validate_inputs
 from bot.symbol_info import get_symbol_filters_cached, normalize_order
 
 
-
-def _print_order_summary(order_in) -> None:
-    print("\n=== ORDER REQUEST SUMMARY ===")
-    print(f"Symbol     : {order_in.symbol}")
-    print(f"Side       : {order_in.side}")
-    print(f"Type       : {order_in.order_type}")
-    print(f"Quantity   : {order_in.quantity}")
-    if order_in.order_type == "LIMIT":
-        print(f"Price      : {order_in.price}")
-    print("=============================\n")
-
-
 def _print_order_response(data: Dict[str, Any]) -> None:
     print("=== ORDER RESPONSE ===")
-    # Different responses may include different fields; print key ones if present
     for k in ["orderId", "status", "symbol", "side", "type", "executedQty", "avgPrice", "price"]:
         if k in data:
             print(f"{k:11}: {data.get(k)}")
-    # Useful extra:
     if "updateTime" in data:
         print(f"{'updateTime':11}: {data.get('updateTime')}")
     print("======================\n")
@@ -47,12 +33,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main():
     load_dotenv()
-    logger = setup_logging("logs/bot.log")
+
+    # Main log (always)
+    main_logger = setup_logging("logs/bot.log")
 
     parser = build_parser()
     args = parser.parse_args()
 
     try:
+        # Load env
+        api_key = os.getenv("BINANCE_API_KEY", "")
+        api_secret = os.getenv("BINANCE_API_SECRET", "")
+        base_url = os.getenv("BINANCE_BASE_URL", "https://testnet.binancefuture.com")
+
+        # Validate inputs
         order_in = validate_inputs(
             symbol=args.symbol,
             side=args.side,
@@ -60,31 +54,48 @@ def main():
             quantity=args.quantity,
             price=args.price,
         )
+
+        # Select per-order log file (for submission deliverables)
+        order_log_file = "logs/market_order.log" if order_in.order_type == "MARKET" else "logs/limit_order.log"
+
+        # IMPORTANT: Use a unique logger name per file to avoid handler duplication
+        order_logger = setup_logging(order_log_file)
+
+        # Normalize quantity/price based on exchange filters
         symbol_filters = get_symbol_filters_cached(
             base_url=base_url,
             api_key=api_key,
             api_secret=api_secret,
-            symbol=order_in.symbol
+            symbol=order_in.symbol,
         )
-
         qty_norm, price_norm = normalize_order(symbol_filters, order_in.quantity, order_in.price)
 
-        logger.info(f"Normalized qty/price: qty={qty_norm}, price={price_norm} (filters={symbol_filters})")
+        # Print request summary (normalized)
+        print("\n=== ORDER REQUEST SUMMARY (Normalized) ===")
+        print(f"Symbol     : {order_in.symbol}")
+        print(f"Side       : {order_in.side}")
+        print(f"Type       : {order_in.order_type}")
+        print(f"Quantity   : {qty_norm}")
+        if order_in.order_type == "LIMIT":
+            print(f"Price      : {price_norm}")
+        print("=========================================\n")
 
-
-        _print_order_summary(order_in)
-
-        api_key = os.getenv("BINANCE_API_KEY", "")
-        api_secret = os.getenv("BINANCE_API_SECRET", "")
-        base_url = os.getenv("BINANCE_BASE_URL", "https://testnet.binancefuture.com")
-
+        # Create API client
         client = BinanceFuturesTestnetClient(
             api_key=api_key,
             api_secret=api_secret,
             base_url=base_url,
         )
 
-        logger.info(f"Placing order: {order_in}")
+        # Log request
+        msg_req = (
+            f"Placing order: symbol={order_in.symbol}, side={order_in.side}, "
+            f"type={order_in.order_type}, qty={qty_norm}, price={price_norm}"
+        )
+        main_logger.info(msg_req)
+        order_logger.info(msg_req)
+
+        # Place order
         resp = place_market_or_limit_order(
             client=client,
             symbol=order_in.symbol,
@@ -93,13 +104,29 @@ def main():
             quantity=qty_norm,
             price=price_norm,
         )
-        logger.info(f"Order response: {resp}")
 
+        # Log response
+        main_logger.info(f"Order response: {resp}")
+        order_logger.info(f"Order response: {resp}")
+
+        # Print response
         _print_order_response(resp)
         print("✅ SUCCESS: Order placed successfully.\n")
 
     except Exception as e:
-        logger.exception(f"❌ FAILED: {e}")
+        # Log errors to main log always
+        main_logger.exception(f"❌ FAILED: {e}")
+
+        # Also log to order-specific file if possible
+        try:
+            # If order_in exists, choose correct file; else fallback to bot.log only
+            order_type = getattr(locals().get("order_in", None), "order_type", None)
+            if order_type in ("MARKET", "LIMIT"):
+                order_log_file = "logs/market_order.log" if order_type == "MARKET" else "logs/limit_order.log"
+                setup_logging(order_log_file).exception(f"❌ FAILED: {e}")
+        except Exception:
+            pass
+
         print("\n❌ FAILED:", str(e))
         print("Check logs/bot.log for details.\n")
 
